@@ -8,9 +8,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/utils/Address.sol";
 
 contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, ReentrancyGuard {
     using SafeMath for uint256;
+    using Address for address payable;
 
     uint256 private constant _totalSupply = 1000000000 * 10**18; // Updated total supply
     IERC20 public usdcToken;
@@ -29,6 +31,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
 
     mapping(address => Stake) private _stakes;
     mapping(address => uint256) private _stakeRewards;
+    address[] private holders; // List of all token holders
 
     event Staked(address indexed user, uint256 amount, uint256 total);
     event Unstaked(address indexed user, uint256 amount, uint256 total);
@@ -64,6 +67,11 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
 
         // Transfer the remaining tokens to the recipient
         super._transfer(sender, recipient, transferAmount);
+
+        // Add to holders list if not already in it
+        if (balanceOf(recipient) >= 50000 * 10**18 && !_isHolder(recipient)) {
+            holders.push(recipient);
+        }
     }
 
     function mint(address to, uint256 amount) external onlyOwner {
@@ -72,13 +80,13 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
     }
 
     function addToBlacklist(address account) external onlyOwner {
-        require(account != address(0), "Blacklist the zero address");
+        require(account != address(0), "Blacklist zero address");
         _blacklist[account] = true;
         emit BlacklistUpdated(account, true);
     }
 
     function removeFromBlacklist(address account) external onlyOwner {
-        require(account != address(0), "Remove from blacklist the zero address");
+        require(account != address(0), "Remove from blacklist zero address");
         _blacklist[account] = false;
         emit BlacklistUpdated(account, false);
     }
@@ -105,7 +113,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
     function calculateReward(address staker, uint256 amount) public view returns (uint256) {
         uint256 stakingDuration = block.timestamp.sub(_stakes[staker].startTime);
         uint256 rewardRate = getRewardRate(amount, _stakes[staker].lockDuration);
-        return amount.mul(rewardRate).mul(stakingDuration).div(1 days).div(10000); // assuming rewardRate is in basis points
+        return amount.mul(rewardRate).mul(stakingDuration).div(1 days).div(10000); // rewardRate is in basis points
     }
 
     function getRewardRate(uint256 amount, uint256 lockDuration) public pure returns (uint256) {
@@ -149,18 +157,18 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
         uint256 totalStaked = getTotalStaked();
         require(totalStaked > 0, "No tokens staked");
 
-        for (uint256 i = 0; i < totalStakers.length; i++) {
-            address staker = totalStakers[i];
-            uint256 share = _stakes[staker].amount.mul(amount).div(totalStaked);
-            usdcToken.transfer(staker, share);
-            emit RevenueShared(staker, share);
+        for (uint256 i = 0; i < holders.length; i++) {
+            address holder = holders[i];
+            uint256 share = balanceOf(holder).mul(amount).div(totalStaked);
+            usdcToken.transfer(holder, share);
+            emit RevenueShared(holder, share);
         }
     }
 
     function getTotalStaked() public view returns (uint256) {
         uint256 total = 0;
-        for (uint256 i = 0; i < totalStakers.length; i++) {
-            total = total.add(_stakes[totalStakers[i]].amount);
+        for (uint256 i = 0; i < holders.length; i++) {
+            total = total.add(balanceOf(holders[i]));
         }
         return total;
     }
@@ -252,7 +260,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
     }
 
     function _safeTransferETH(address to, uint256 amount) internal {
-        payable(to).sendValue(amount);
+        (bool success, ) = to.call{value: amount}("");
         require(success, "ETH transfer failed");
     }
 }
