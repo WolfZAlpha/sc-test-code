@@ -252,7 +252,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
     }
 
     function _safeTransferETH(address to, uint256 amount) internal {
-        (bool success, ) = to.call{value: amount}("");
+        payable(to).sendValue(amount);
         require(success, "ETH transfer failed");
     }
 }
