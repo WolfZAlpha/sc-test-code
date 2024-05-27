@@ -20,6 +20,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
 
     uint256 public constant burnRate = 3; // 3% burn rate
     uint256 public constant taxRate = 6; // 6% tax rate
+    bool public isStakingEnabled = false; // Staking feature flag
 
     mapping(address => bool) private _blacklist;
 
@@ -39,6 +40,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
     event TokensLocked(address indexed user, uint256 amount, uint256 lockDuration);
     event TokensPurchased(address indexed buyer, uint256 amount, uint256 price);
     event BlacklistUpdated(address indexed user, bool value);
+    event StakingEnabled(bool enabled);
 
     constructor(IERC20 _usdcToken, address _taxWallet) ERC20("Prospera", "PROS") {
         _mint(msg.sender, _totalSupply);
@@ -48,6 +50,11 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
 
     modifier notBlacklisted(address account) {
         require(!_blacklist[account], "Blacklisted address");
+        _;
+    }
+
+    modifier stakingEnabled() {
+        require(isStakingEnabled, "Staking is not enabled");
         _;
     }
 
@@ -74,6 +81,11 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
         }
     }
 
+    function _transferTaxToWallet(uint256 amount) internal {
+        (bool success, ) = taxWallet.call{value: amount}("");
+        require(success, "ETH transfer to tax wallet failed");
+    }
+
     function mint(address to, uint256 amount) external onlyOwner {
         require(to != address(0), "Mint to the zero address");
         _mint(to, amount);
@@ -91,7 +103,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
         emit BlacklistUpdated(account, false);
     }
 
-    function stake(uint256 amount) external nonReentrant whenNotPaused notBlacklisted(msg.sender) {
+    function stake(uint256 amount) external nonReentrant whenNotPaused notBlacklisted(msg.sender) stakingEnabled {
         require(amount > 0, "Cannot stake 0 tokens");
         _burn(msg.sender, amount);
         _stakes[msg.sender].amount = _stakes[msg.sender].amount.add(amount);
@@ -99,7 +111,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
         emit Staked(msg.sender, amount, _stakes[msg.sender].amount);
     }
 
-    function unstake(uint256 amount) external nonReentrant whenNotPaused notBlacklisted(msg.sender) {
+    function unstake(uint256 amount) external nonReentrant whenNotPaused notBlacklisted(msg.sender) stakingEnabled {
         require(amount > 0, "Cannot unstake 0 tokens");
         require(_stakes[msg.sender].amount >= amount, "Insufficient staked amount");
         require(block.timestamp >= _stakes[msg.sender].startTime.add(_stakes[msg.sender].lockDuration), "Tokens are still locked");
@@ -142,7 +154,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
         }
     }
 
-    function lockTokens(uint256 amount, uint256 lockDuration) external nonReentrant whenNotPaused notBlacklisted(msg.sender) {
+    function lockTokens(uint256 amount, uint256 lockDuration) external nonReentrant whenNotPaused notBlacklisted(msg.sender) stakingEnabled {
         require(amount > 0, "Cannot lock 0 tokens");
         require(lockDuration >= 30 days, "Lock duration must be at least 30 days");
         _burn(msg.sender, amount);
@@ -183,6 +195,11 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
 
     function unpause() public onlyOwner {
         _unpause();
+    }
+
+    function enableStaking(bool _enabled) external onlyOwner {
+        isStakingEnabled = _enabled;
+        emit StakingEnabled(_enabled);
     }
 
     function totalStaked(address staker) external view returns (uint256) {
