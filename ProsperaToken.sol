@@ -80,13 +80,13 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
     }
 
     function addToBlacklist(address account) external onlyOwner {
-        require(account != address(0), "Blacklist zero address");
+        require(account != address(0), "Blacklist the zero address");
         _blacklist[account] = true;
         emit BlacklistUpdated(account, true);
     }
 
     function removeFromBlacklist(address account) external onlyOwner {
-        require(account != address(0), "Remove from blacklist zero address");
+        require(account != address(0), "Remove from blacklist the zero address");
         _blacklist[account] = false;
         emit BlacklistUpdated(account, false);
     }
@@ -113,7 +113,7 @@ contract ProsperaToken is ERC20, ERC20Burnable, ERC20Pausable, Ownable, Reentran
     function calculateReward(address staker, uint256 amount) public view returns (uint256) {
         uint256 stakingDuration = block.timestamp.sub(_stakes[staker].startTime);
         uint256 rewardRate = getRewardRate(amount, _stakes[staker].lockDuration);
-        return amount.mul(rewardRate).mul(stakingDuration).div(1 days).div(10000); // rewardRate is in basis points
+        return amount.mul(rewardRate).mul(stakingDuration).div(1 days).div(10000); // assuming rewardRate is in basis points
     }
 
     function getRewardRate(uint256 amount, uint256 lockDuration) public pure returns (uint256) {
